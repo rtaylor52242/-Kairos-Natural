@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../context/ContentContext';
 import { Navigate } from 'react-router-dom';
 import { AppContent } from '../types';
-import { Save, Layout, FileText, ShoppingCart, Users, HelpCircle, MessageSquare, Plus, Trash2, Image, Globe, Upload } from 'lucide-react';
+import { Save, Layout, FileText, ShoppingCart, Users, HelpCircle, MessageSquare, Plus, Trash2, Globe, Upload } from 'lucide-react';
+
+// --- Helper Components ---
 
 // Component: Image Input (URL or Upload)
 const ImageInput = ({ label, value, onChange }: { label: string, value: string, onChange: (val: string) => void }) => {
@@ -24,7 +26,7 @@ const ImageInput = ({ label, value, onChange }: { label: string, value: string, 
     <div className="mb-4">
       <label className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1">{label}</label>
       <div className="flex gap-4 mb-2">
-        <label className="flex items-center text-sm cursor-pointer">
+        <label className="flex items-center text-sm cursor-pointer select-none">
           <input 
             type="radio" 
             checked={mode === 'url'} 
@@ -33,7 +35,7 @@ const ImageInput = ({ label, value, onChange }: { label: string, value: string, 
           />
           <Globe size={14} className="mr-1"/> Use Image URL
         </label>
-        <label className="flex items-center text-sm cursor-pointer">
+        <label className="flex items-center text-sm cursor-pointer select-none">
           <input 
             type="radio" 
             checked={mode === 'file'} 
@@ -71,7 +73,7 @@ const ImageInput = ({ label, value, onChange }: { label: string, value: string, 
 
 // Component: Standard Input Group
 const InputGroup = ({ label, value, onChange, type = "text", rows = 1 }: { label: string, value: any, onChange: (val: any) => void, type?: string, rows?: number }) => (
-    <div className="mb-4">
+    <div className="mb-4 relative">
         <label className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1">{label}</label>
         {rows > 1 ? (
             <textarea 
@@ -91,14 +93,46 @@ const InputGroup = ({ label, value, onChange, type = "text", rows = 1 }: { label
     </div>
 );
 
+// Component: Delete Button with Confirmation
+const DeleteButton = ({ onClick }: { onClick: () => void }) => (
+    <button 
+        type="button"
+        onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Delete button clicked'); // Debug log
+            if (window.confirm('Are you sure you want to delete this item? This action cannot be undone until you save.')) {
+                onClick();
+            }
+        }} 
+        className="absolute top-2 right-2 text-stone-400 hover:text-red-600 bg-white hover:bg-red-50 rounded-full p-2 shadow-sm border border-stone-200 z-50 transition-all cursor-pointer hover:scale-110 active:scale-95 flex items-center justify-center"
+        title="Delete Item"
+    >
+        <Trash2 size={18}/>
+    </button>
+);
+
+// Component: Nav Button
+const AdminNavButton = ({ tab, activeTab, icon: Icon, label, onClick }: { tab: string, activeTab: string, icon: any, label: string, onClick: (t: any) => void }) => (
+    <button 
+        onClick={() => onClick(tab)}
+        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-brand-lightGreen text-brand-green' : 'text-stone-600 hover:bg-stone-50'}`}
+    >
+        <Icon size={18} /> <span>{label}</span>
+    </button>
+);
+
+// --- Main Component ---
+
 const Admin: React.FC = () => {
-  const { content, updateContent, isAdminMode } = useContent();
+  const { content, setFullContent, isAdminMode } = useContent();
   const [activeTab, setActiveTab] = useState<'general' | 'about' | 'services' | 'products' | 'blog' | 'testimonials' | 'faq'>('general');
   const [localContent, setLocalContent] = useState<AppContent>(content);
   
-  // Sync local state when content changes (e.g. on first load)
+  // Sync local state when content changes
   useEffect(() => {
     setLocalContent(content);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
 
   if (!isAdminMode) {
@@ -110,13 +144,11 @@ const Admin: React.FC = () => {
   }
 
   const handleSave = () => {
-    Object.keys(localContent).forEach((key) => {
-        updateContent(key as keyof AppContent, localContent[key as keyof AppContent]);
-    });
+    setFullContent(localContent);
     alert('All changes saved successfully!');
   };
 
-  // Generic handler for simple object fields (Hero, About, CompanyInfo)
+  // Generic handler for simple object fields
   const handleObjectChange = (section: keyof AppContent, key: string, value: any) => {
     setLocalContent(prev => ({
       ...prev,
@@ -153,33 +185,35 @@ const Admin: React.FC = () => {
   };
 
 
-  // Generic handler for updating an item in an array (Products, Services, etc.)
+  // Generic handler for updating an item in an array
   const handleArrayChange = (section: keyof AppContent | 'team', index: number, key: string, value: any) => {
     if (section === 'team') {
-        // Special handling for team nested in about
-        const list = [...localContent.about.team];
-        list[index] = { ...list[index], [key]: value };
-        setLocalContent(prev => ({
-            ...prev,
-            about: {
-                ...prev.about,
-                team: list
-            }
-        }));
+        setLocalContent(prev => {
+            const list = [...prev.about.team];
+            list[index] = { ...list[index], [key]: value };
+            return {
+                ...prev,
+                about: {
+                    ...prev.about,
+                    team: list
+                }
+            };
+        });
         return;
     }
     
-    const list = [...(localContent[section] as any[])];
-    list[index] = { ...list[index], [key]: value };
-    setLocalContent(prev => ({ ...prev, [section]: list }));
+    setLocalContent(prev => {
+        const list = [...(prev[section] as any[])];
+        list[index] = { ...list[index], [key]: value };
+        return { ...prev, [section]: list };
+    });
   };
 
   // Add Item to Array
   const handleAdd = (section: keyof AppContent | 'team') => {
-    const timestamp = Date.now().toString();
+    const timestamp = Date.now().toString() + Math.floor(Math.random() * 1000); // Ensure unique ID
     let newItem: any = { id: timestamp };
 
-    // Special case for team
     if (section === 'team') {
         newItem = { ...newItem, name: 'New Expert', role: 'Specialist', image: 'https://picsum.photos/300/300' };
         setLocalContent(prev => ({
@@ -192,7 +226,6 @@ const Admin: React.FC = () => {
         return;
     }
 
-    // Default templates
     switch (section) {
         case 'services':
             newItem = { ...newItem, title: 'New Service', description: 'Service description...', iconName: 'Activity' };
@@ -217,53 +250,36 @@ const Admin: React.FC = () => {
     }));
   };
 
-  // Remove Item from Array
-  const handleDelete = (section: keyof AppContent | 'team', index: number) => {
-      const confirmed = window.confirm('Are you sure you want to delete this item? This action cannot be undone until you save.');
-      if (!confirmed) return;
+  // Remove Item from Array using UNIQUE ID
+  const handleDelete = (section: keyof AppContent | 'team', id: string) => {
+      console.log(`Attempting to delete item ${id} from ${section}`);
+      
+      setLocalContent(prev => {
+          if (section === 'team') {
+              return {
+                  ...prev,
+                  about: {
+                      ...prev.about,
+                      team: prev.about.team.filter(t => t.id !== id)
+                  }
+              };
+          }
 
-      if (section === 'team') {
-          const list = [...localContent.about.team];
-          list.splice(index, 1);
-          setLocalContent(prev => ({
-              ...prev,
-              about: {
-                  ...prev.about,
-                  team: list
-              }
-          }));
-          return;
-      }
-
-      const list = [...(localContent[section] as any[])];
-      list.splice(index, 1);
-      setLocalContent(prev => ({ ...prev, [section]: list }));
+          // For generic array sections
+          const currentList = prev[section];
+          if (Array.isArray(currentList)) {
+              return { 
+                  ...prev, 
+                  [section]: currentList.filter((item: any) => item.id !== id) 
+              };
+          }
+          
+          return prev;
+      });
   };
-
-  const NavButton = ({ tab, icon: Icon, label }: { tab: typeof activeTab, icon: any, label: string }) => (
-    <button 
-        onClick={() => setActiveTab(tab)}
-        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === tab ? 'bg-brand-lightGreen text-brand-green' : 'text-stone-600 hover:bg-stone-50'}`}
-    >
-        <Icon size={18} /> <span>{label}</span>
-    </button>
-  );
-
-  // Helper for Delete Button Styles
-  const DeleteButton = ({ onClick }: { onClick: () => void }) => (
-    <button 
-        type="button"
-        onClick={onClick} 
-        className="absolute top-3 right-3 text-stone-400 hover:text-red-500 bg-white rounded-full p-2 shadow-sm border border-stone-200 z-10 hover:shadow-md transition-all"
-        title="Delete Item"
-    >
-        <Trash2 size={18}/>
-    </button>
-  );
 
   return (
     <div className="min-h-screen bg-stone-100 flex flex-col md:flex-row">
-      {/* Sidebar */}
       <aside className="w-full md:w-64 bg-white border-r border-stone-200 flex-shrink-0">
         <div className="p-6 border-b border-stone-100">
           <h2 className="text-xl font-bold text-stone-800 flex items-center gap-2">
@@ -271,19 +287,18 @@ const Admin: React.FC = () => {
           </h2>
         </div>
         <nav className="p-4 space-y-2 overflow-x-auto md:overflow-visible flex md:flex-col">
-          <NavButton tab="general" icon={Globe} label="General & Info" />
-          <NavButton tab="about" icon={Users} label="About & Team" />
-          <NavButton tab="services" icon={Layout} label="Services" />
-          <NavButton tab="products" icon={ShoppingCart} label="Products" />
-          <NavButton tab="blog" icon={FileText} label="Blog Posts" />
-          <NavButton tab="testimonials" icon={MessageSquare} label="Testimonials" />
-          <NavButton tab="faq" icon={HelpCircle} label="FAQ" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="general" icon={Globe} label="General & Info" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="about" icon={Users} label="About & Team" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="services" icon={Layout} label="Services" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="products" icon={ShoppingCart} label="Products" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="blog" icon={FileText} label="Blog Posts" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="testimonials" icon={MessageSquare} label="Testimonials" />
+          <AdminNavButton activeTab={activeTab} onClick={setActiveTab} tab="faq" icon={HelpCircle} label="FAQ" />
         </nav>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen pb-24">
-        <div className="flex justify-between items-center mb-8 sticky top-0 bg-stone-100 pt-4 pb-4 z-10 backdrop-blur-sm bg-opacity-90">
+        <div className="flex justify-between items-center mb-8 sticky top-0 bg-stone-100 pt-4 pb-4 z-40 backdrop-blur-sm bg-opacity-90">
           <h1 className="text-2xl font-bold text-stone-800 capitalize">{activeTab === 'about' ? 'About & Team' : activeTab} Management</h1>
           <button 
             onClick={handleSave}
@@ -295,7 +310,6 @@ const Admin: React.FC = () => {
 
         <div className="bg-white rounded-xl shadow-sm p-6 md:p-8 border border-stone-200">
           
-          {/* --- GENERAL TAB --- */}
           {activeTab === 'general' && (
             <div className="space-y-10">
               <section>
@@ -329,7 +343,6 @@ const Admin: React.FC = () => {
             </div>
           )}
 
-          {/* --- ABOUT TAB --- */}
           {activeTab === 'about' && (
             <div className="space-y-8">
                  <ImageInput label="Main About Image" value={localContent.about.image} onChange={v => handleObjectChange('about', 'image', v)} />
@@ -348,8 +361,8 @@ const Admin: React.FC = () => {
                      
                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {localContent.about.team?.map((expert, idx) => (
-                            <div key={expert.id} className="p-4 border border-stone-200 rounded-lg bg-stone-50 relative">
-                                <DeleteButton onClick={() => handleDelete('team', idx)} />
+                            <div key={expert.id} className="p-4 pt-8 border border-stone-200 rounded-lg bg-stone-50 relative">
+                                <DeleteButton onClick={() => handleDelete('team', expert.id)} />
                                 <div className="mb-4">
                                     <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-white shadow-md mb-2">
                                         <img src={expert.image} alt="" className="w-full h-full object-cover"/>
@@ -368,7 +381,6 @@ const Admin: React.FC = () => {
             </div>
           )}
 
-          {/* --- SERVICES TAB --- */}
           {activeTab === 'services' && (
             <div className="space-y-6">
               <div className="flex justify-end">
@@ -378,12 +390,15 @@ const Admin: React.FC = () => {
               </div>
               {localContent.services.map((service, idx) => (
                 <div key={service.id} className="p-6 border border-stone-200 rounded-lg bg-stone-50 relative group hover:border-stone-300 transition">
-                  <DeleteButton onClick={() => handleDelete('services', idx)} />
+                  <DeleteButton onClick={() => handleDelete('services', service.id)} />
                   <h4 className="font-bold text-sm mb-4 text-stone-500 uppercase">Service #{idx + 1}</h4>
-                  <div className="grid gap-4">
-                       <InputGroup label="Title" value={service.title} onChange={v => handleArrayChange('services', idx, 'title', v)} />
-                       <InputGroup label="Description" value={service.description} onChange={v => handleArrayChange('services', idx, 'description', v)} rows={2} />
-                       {/* Icon selection simplified to text for now */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                       <div className="md:col-span-2">
+                         <InputGroup label="Service Title" value={service.title} onChange={v => handleArrayChange('services', idx, 'title', v)} />
+                       </div>
+                       <div className="md:col-span-2">
+                         <InputGroup label="Description" value={service.description} onChange={v => handleArrayChange('services', idx, 'description', v)} rows={2} />
+                       </div>
                        <InputGroup label="Icon Name (Lucide React)" value={service.iconName} onChange={v => handleArrayChange('services', idx, 'iconName', v)} />
                   </div>
                 </div>
@@ -391,5 +406,122 @@ const Admin: React.FC = () => {
             </div>
           )}
 
-           {/* --- PRODUCTS TAB --- */}
            {activeTab === 'products' && (
+             <div className="space-y-6">
+               <div className="flex justify-end">
+                   <button onClick={() => handleAdd('products')} className="flex items-center gap-2 text-sm font-bold text-brand-green hover:bg-brand-lightGreen px-3 py-2 rounded">
+                       <Plus size={16}/> Add New Product
+                   </button>
+               </div>
+               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                 {localContent.products.map((product, idx) => (
+                   <div key={product.id} className="p-6 border border-stone-200 rounded-lg bg-stone-50 relative group hover:border-stone-300 transition">
+                     <DeleteButton onClick={() => handleDelete('products', product.id)} />
+                     <div className="flex gap-4 mb-4">
+                        <div className="w-20 h-20 flex-shrink-0 bg-white rounded border border-stone-200 overflow-hidden">
+                            <img src={product.image} alt="" className="w-full h-full object-cover"/>
+                        </div>
+                        <div className="flex-grow">
+                             <h4 className="font-bold text-sm text-stone-500 uppercase mb-1">Product #{idx + 1}</h4>
+                             <h3 className="font-bold text-stone-900">{product.name || 'Untitled'}</h3>
+                        </div>
+                     </div>
+                     
+                     <div className="grid gap-4">
+                          <InputGroup label="Product Name" value={product.name} onChange={v => handleArrayChange('products', idx, 'name', v)} />
+                          <div className="grid grid-cols-2 gap-4">
+                             <InputGroup label="Price (NGN)" type="number" value={product.price} onChange={v => handleArrayChange('products', idx, 'price', Number(v))} />
+                             <InputGroup label="Category" value={product.category} onChange={v => handleArrayChange('products', idx, 'category', v)} />
+                          </div>
+                          <ImageInput label="Product Image" value={product.image} onChange={v => handleArrayChange('products', idx, 'image', v)} />
+                          <InputGroup label="Description" value={product.description} onChange={v => handleArrayChange('products', idx, 'description', v)} rows={3} />
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           )}
+
+           {activeTab === 'blog' && (
+             <div className="space-y-6">
+               <div className="flex justify-end">
+                   <button onClick={() => handleAdd('blogPosts')} className="flex items-center gap-2 text-sm font-bold text-brand-green hover:bg-brand-lightGreen px-3 py-2 rounded">
+                       <Plus size={16}/> Add New Post
+                   </button>
+               </div>
+               {localContent.blogPosts.map((post, idx) => (
+                 <div key={post.id} className="p-6 border border-stone-200 rounded-lg bg-stone-50 relative group hover:border-stone-300 transition">
+                   <DeleteButton onClick={() => handleDelete('blogPosts', post.id)} />
+                   <h4 className="font-bold text-sm mb-4 text-stone-500 uppercase">Blog Post #{idx + 1}</h4>
+                   <div className="grid gap-4 md:grid-cols-2">
+                        <div className="md:col-span-2">
+                            <InputGroup label="Post Title" value={post.title} onChange={v => handleArrayChange('blogPosts', idx, 'title', v)} />
+                        </div>
+                        <InputGroup label="Author" value={post.author} onChange={v => handleArrayChange('blogPosts', idx, 'author', v)} />
+                        <InputGroup label="Date" value={post.date} onChange={v => handleArrayChange('blogPosts', idx, 'date', v)} />
+                        
+                        <div className="md:col-span-2">
+                             <ImageInput label="Cover Image" value={post.image} onChange={v => handleArrayChange('blogPosts', idx, 'image', v)} />
+                        </div>
+                        <div className="md:col-span-2">
+                            <InputGroup label="Short Excerpt" value={post.excerpt} onChange={v => handleArrayChange('blogPosts', idx, 'excerpt', v)} rows={2} />
+                        </div>
+                        <div className="md:col-span-2">
+                            <InputGroup label="Full Content" value={post.content} onChange={v => handleArrayChange('blogPosts', idx, 'content', v)} rows={5} />
+                        </div>
+                   </div>
+                 </div>
+               ))}
+             </div>
+           )}
+
+           {activeTab === 'testimonials' && (
+             <div className="space-y-6">
+               <div className="flex justify-end">
+                   <button onClick={() => handleAdd('testimonials')} className="flex items-center gap-2 text-sm font-bold text-brand-green hover:bg-brand-lightGreen px-3 py-2 rounded">
+                       <Plus size={16}/> Add Testimonial
+                   </button>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 {localContent.testimonials.map((t, idx) => (
+                   <div key={t.id} className="p-6 border border-stone-200 rounded-lg bg-stone-50 relative">
+                     <DeleteButton onClick={() => handleDelete('testimonials', t.id)} />
+                     <h4 className="font-bold text-sm mb-4 text-stone-500 uppercase">Review #{idx + 1}</h4>
+                     <div className="space-y-4">
+                        <InputGroup label="Client Name" value={t.author} onChange={v => handleArrayChange('testimonials', idx, 'author', v)} />
+                        <InputGroup label="Role / Condition" value={t.role || ''} onChange={v => handleArrayChange('testimonials', idx, 'role', v)} />
+                        <InputGroup label="Testimonial Text" value={t.text} onChange={v => handleArrayChange('testimonials', idx, 'text', v)} rows={3} />
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           )}
+
+           {activeTab === 'faq' && (
+             <div className="space-y-6">
+               <div className="flex justify-end">
+                   <button onClick={() => handleAdd('faq')} className="flex items-center gap-2 text-sm font-bold text-brand-green hover:bg-brand-lightGreen px-3 py-2 rounded">
+                       <Plus size={16}/> Add Question
+                   </button>
+               </div>
+               {localContent.faq.map((item, idx) => (
+                 <div key={item.id} className="p-6 border border-stone-200 rounded-lg bg-stone-50 relative">
+                   <DeleteButton onClick={() => handleDelete('faq', item.id)} />
+                   <h4 className="font-bold text-sm mb-4 text-stone-500 uppercase">Question #{idx + 1}</h4>
+                   <div className="space-y-4">
+                        <InputGroup label="Question" value={item.question} onChange={v => handleArrayChange('faq', idx, 'question', v)} />
+                        <InputGroup label="Answer" value={item.answer} onChange={v => handleArrayChange('faq', idx, 'answer', v)} rows={3} />
+                   </div>
+                 </div>
+               ))}
+             </div>
+           )}
+
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Admin;

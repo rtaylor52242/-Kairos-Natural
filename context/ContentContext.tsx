@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { AppContent, ContentContextType } from '../types';
 import { INITIAL_CONTENT } from '../constants';
@@ -15,12 +16,16 @@ export const ContentProvider: React.FC<{ children: ReactNode }> = ({ children })
     }));
   };
 
+  const setFullContent = (data: AppContent) => {
+    setContent(data);
+  };
+
   const toggleAdminMode = () => {
     setIsAdminMode(prev => !prev);
   };
 
   return (
-    <ContentContext.Provider value={{ content, updateContent, isAdminMode, toggleAdminMode }}>
+    <ContentContext.Provider value={{ content, updateContent, setFullContent, isAdminMode, toggleAdminMode }}>
       {children}
     </ContentContext.Provider>
   );

@@ -86,6 +86,7 @@ export interface AppContent {
 export interface ContentContextType {
   content: AppContent;
   updateContent: (section: keyof AppContent, data: any) => void;
+  setFullContent: (data: AppContent) => void;
   isAdminMode: boolean;
   toggleAdminMode: () => void;
 }
